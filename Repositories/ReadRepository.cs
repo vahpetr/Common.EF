@@ -3,21 +3,23 @@ using System.Collections.Generic;
 using System.Data.Entity;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using Common.Dto;
+using Common.Enums;
 using Common.Extensions;
-using Common.Models.Dto;
-using Common.Models.Enums;
-using Common.Models.Filters;
+using Common.Filters;
 using Common.Repositories.Contract;
+using Common.Utilites;
 
 namespace Common.EF.Repositories
 {
     /// <summary>
     /// Базовое хранилище поддерживающее чтения данных
     /// </summary>
-    /// <typeparam name="TEntity">Сущность контекста</typeparam>
-    /// <typeparam name="TFilter">Фильтр сущностей</typeparam>
+    /// <typeparam name="TEntity">Тип сущности</typeparam>
+    /// <typeparam name="TFilter">Тип фильтра</typeparam>
     public class ReadRepository<TEntity, TFilter> : IReadRepository<TEntity, TFilter> 
         where TEntity : class
         where TFilter : BaseFilter
@@ -173,7 +175,7 @@ namespace Common.EF.Repositories
         protected virtual IQueryable<TEntity> ApplySort(IQueryable<TEntity> query, TFilter filter)
         {
             var exist =
-                filter.Sort.Split('.')
+                filter.SortBy.Split('.')
                 .Aggregate(query.ElementType, (type, name) =>
                 {
                     if (type == null) return null;
@@ -185,34 +187,60 @@ namespace Common.EF.Repositories
                     return propertyInfo.PropertyType;
                 }) != null;
             // отсортировать нужно в любом случае иначе дальше Skip/Take упадут
-            if (!exist && query.ElementType.GetProperty(filter.Sort) == null)
+            if (!exist && query.ElementType.GetProperty(filter.SortBy) == null)
             {
-                filter.Sort = "Id";
+                filter.SortBy = "Id";
             }
 
             // если Id нет берём первое попавшееся свойство
-            if (!exist && query.ElementType.GetProperty(filter.Sort) == null)
+            if (!exist && query.ElementType.GetProperty(filter.SortBy) == null)
             {
-                filter.Sort = query.ElementType.GetProperties().First().Name;
+                filter.SortBy = query.ElementType.GetProperties().First().Name;
             }
 
             var parameter = Expression.Parameter(query.ElementType, "entity");
 
             //поддержка глубоких селекторов model.innerModel
-            var property = filter.Sort.Split('.').Aggregate<string, Expression>(parameter, Expression.Property);
+            var property = filter.SortBy.Split('.').Aggregate<string, Expression>(parameter, Expression.Property);
             var func = typeof (Func<,>);
             var genericFunc = func.MakeGenericType(query.ElementType, property.Type);
             var expression = Expression.Lambda(genericFunc, property, parameter);
 
-            return query.Provider.CreateQuery<TEntity>(
-                Expression.Call(
-                    typeof (Queryable),
-                    filter.Order == Order.Asc ? "OrderBy" : "OrderByDescending",
-                    new[] {query.ElementType, expression.Body.Type},
-                    query.Expression,
-                    Expression.Quote(expression)
-                    )
-                );
+            query = query.Provider.CreateQuery<TEntity>(
+                    Expression.Call(
+                        typeof(Queryable),
+                        filter.Order == Order.Asc ? "OrderBy" : "OrderByDescending",
+                        new[] { query.ElementType, expression.Body.Type },
+                        query.Expression,
+                        Expression.Quote(expression)));
+
+            var genericType = typeof(EntityUtilites<>).MakeGenericType(query.ElementType);
+            var getKeyProps = genericType.GetMethod("Get");
+            object[] args = { };
+            var keyProps = (PropertyInfo[])getKeyProps.Invoke(null, args);
+
+            //исключаем свойство из дополнительной сортировке по ключу
+            keyProps = keyProps.Where(p => p.Name != filter.SortBy).ToArray();
+
+            //обязательно нужна дополнительная сортировка по ключу если ключ составной
+            if (keyProps.Length == 1) return query;
+            for (int i = 0, l = keyProps.Length - 1; i < l; i++)
+            {
+                var keyProperty = Expression.Property(parameter, keyProps[i].Name);
+                var keyFunc = typeof(Func<,>);
+                var keyGenericFunc = keyFunc.MakeGenericType(query.ElementType, keyProperty.Type);
+                var keyEexpression = Expression.Lambda(keyGenericFunc, keyProperty, parameter);
+
+                query = query.Provider.CreateQuery<TEntity>(
+                    Expression.Call(
+                        typeof(Queryable),
+                        filter.Order == Order.Asc ? "ThenBy" : "ThenByDescending",
+                        new[] { query.ElementType, keyEexpression.Body.Type },
+                        query.Expression,
+                        Expression.Quote(keyEexpression)));
+            }
+
+            return query;
         }
 
         /// <summary>

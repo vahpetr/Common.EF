@@ -11,7 +11,7 @@ namespace Common.EF.Repositories
     /// <summary>
     /// Базовое хранилище поддерживающее редактирования данных
     /// </summary>
-    /// <typeparam name="TEntity">Сущность</typeparam>
+    /// <typeparam name="TEntity">Тип сущности</typeparam>
     public class EditRepository<TEntity> : IEditRepository<TEntity>
         where TEntity : class
     {
