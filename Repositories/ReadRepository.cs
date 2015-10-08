@@ -220,13 +220,10 @@ namespace Common.EF.Repositories
             var keyProps = (PropertyInfo[])getKeyProps.Invoke(null, args);
 
             //исключаем свойство из дополнительной сортировке по ключу
-            keyProps = keyProps.Where(p => p.Name != filter.SortBy).ToArray();
-
             //обязательно нужна дополнительная сортировка по ключу если ключ составной
-            if (keyProps.Length == 1) return query;
-            for (int i = 0, l = keyProps.Length - 1; i < l; i++)
+            foreach (var prop in keyProps.Where(p => p.Name != filter.SortBy))
             {
-                var keyProperty = Expression.Property(parameter, keyProps[i].Name);
+                var keyProperty = Expression.Property(parameter, prop.Name);
                 var keyFunc = typeof(Func<,>);
                 var keyGenericFunc = keyFunc.MakeGenericType(query.ElementType, keyProperty.Type);
                 var keyEexpression = Expression.Lambda(keyGenericFunc, keyProperty, parameter);
@@ -363,6 +360,28 @@ namespace Common.EF.Repositories
         public Task<bool> ExistAsync(TFilter filter)
         {
             return Task.FromResult(Exist(filter));
+        }
+
+        /// <summary>
+        /// Проверить существуют ли сущности
+        /// </summary>
+        /// <param name="key">Ключ</param>
+        /// <returns>Логическое значение</returns>
+        public virtual bool Exist(params object[] key)
+        {
+            var exist = dbQuery.Exist(key);
+            return exist;
+        }
+
+        /// <summary>
+        /// Асинхронно проверить существуют ли сущности
+        /// </summary>
+        /// <param name="key">Ключ</param>
+        /// <returns>Логическое значение</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Task<bool> ExistAsync(params object[] key)
+        {
+            return Task.FromResult(Exist(key));
         }
 
         /// <summary>

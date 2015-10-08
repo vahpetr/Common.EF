@@ -94,7 +94,18 @@ namespace Common.EF.Repositories
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public virtual void Remove(TEntity entity)
         {
+            //TODO написать метод сбора объекта из ключа
             var identity = entity.Identity();
+            dbContext.Entry(identity).State = EntityState.Deleted;
+        }
+
+        /// <summary>
+        /// Удалить сущность
+        /// </summary>
+        /// <param name="key">Ключ</param>
+        public void Remove(params object[] key)
+        {
+            var identity = key.Init<TEntity>();
             dbContext.Entry(identity).State = EntityState.Deleted;
         }
 
