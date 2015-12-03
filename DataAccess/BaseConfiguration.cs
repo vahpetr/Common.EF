@@ -50,7 +50,7 @@ namespace Common.EF.DataAccess
 
                         if (e.GetType() == typeof(DbEntityValidationException))
                         {
-                            //TODO открыть отладочный процесс
+                            //открыть отладочный процесс
                             if (Debugger.IsAttached == false)
                             {
                                 Debugger.Launch();
