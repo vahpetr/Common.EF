@@ -21,15 +21,20 @@ namespace Common.EF.Repositories
         protected readonly DbContext dbContext;
 
         /// <summary>
-        /// Представление списка сущностей отслеживающего изменения
+        /// Представление ленивого списка сущностей отслеживающего изменения
         /// </summary>
-        protected readonly Lazy<DbSet<TEntity>> dbSet;
+        private readonly Lazy<DbSet<TEntity>> _dbSet;
 
         protected EditRepository(DbContext dbContext)
         {
             this.dbContext = dbContext;
-            dbSet = new Lazy<DbSet<TEntity>>(dbContext.Set<TEntity>);
+            _dbSet = new Lazy<DbSet<TEntity>>(dbContext.Set<TEntity>);
         }
+
+        /// <summary>
+        /// Представление списка сущностей отслеживающего изменения
+        /// </summary>
+        protected DbSet<TEntity> dbSet { get { return _dbSet.Value; } }
 
         /// <summary>
         /// Добавить граф сущности в хранилище сущностей и пометить его как добавленный
@@ -40,7 +45,7 @@ namespace Common.EF.Repositories
             var dbEntityEntry = dbContext.Entry(entity);
             if (dbEntityEntry.State == EntityState.Detached)
             {
-                dbSet.Value.Add(entity);
+                dbSet.Add(entity);
             }
             dbEntityEntry.State = EntityState.Added;
         }
@@ -52,7 +57,7 @@ namespace Common.EF.Repositories
         private void Attach(TEntity entity)
         {
             if (dbContext.Entry(entity).State != EntityState.Detached) return;
-            dbSet.Value.Attach(entity);
+            dbSet.Attach(entity);
         }
 
         /// <summary>

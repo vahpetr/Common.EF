@@ -20,15 +20,39 @@ namespace Common.EF.Repositories
     /// </summary>
     /// <typeparam name="TEntity">Тип сущности</typeparam>
     /// <typeparam name="TFilter">Тип фильтра</typeparam>
-    public class ReadRepository<TEntity, TFilter> : IReadRepository<TEntity, TFilter> 
+    public class ReadRepository<TEntity, TFilter> : IReadRepository<TEntity, TFilter>
         where TEntity : class
         where TFilter : BaseFilter
     {
         /// <summary>
-        /// Отслеживаие сущностей.
-        /// Если включено значительно понижает производительность 
+        /// Запрос к ленивому списку сущностей не отслеживаемый с подключёнными таблицами
         /// </summary>
-        protected bool Tracking = false;
+        private readonly Lazy<IQueryable<TEntity>> _dbQueryNoTrackingWithInclude;
+
+        /// <summary>
+        /// Запрос к ленивому списку сущностей не отслеживаемый и без подключения таблиц
+        /// </summary>
+        private readonly Lazy<IQueryable<TEntity>> _dbQueryNoTrackingWithoutInclude;
+
+        /// <summary>
+        /// Запрос к ленивому списку сущностей отслеживаемый с подключёнными таблицами
+        /// </summary>
+        private readonly Lazy<IQueryable<TEntity>> _dbQueryTrackingWithInclude;
+
+        /// <summary>
+        /// Запрос к ленивому списку сущностей отслеживаемый и без подключения таблиц
+        /// </summary>
+        private readonly Lazy<IQueryable<TEntity>> _dbQueryTrackingWithoutInclude;
+
+        /// <summary>
+        /// Представление ленивого списка сущностей отслеживающего изменения
+        /// </summary>
+        private readonly Lazy<DbSet<TEntity>> _dbSet;
+
+        /// <summary>
+        /// Слой доступа к базе данных
+        /// </summary>
+        protected readonly DbContext dbContext;
 
         /// <summary>
         /// При получении сущности вначале искать в локале.
@@ -42,34 +66,68 @@ namespace Common.EF.Repositories
         protected bool Include = true;
 
         /// <summary>
-        /// Слой доступа к базе данных
+        /// Отслеживаие сущностей.
+        /// Если включено значительно понижает производительность 
         /// </summary>
-        protected readonly DbContext dbContext;
+        protected bool Tracking = false;
+
+        protected ReadRepository(DbContext dbContext)
+        {
+            dbContext.Configuration.LazyLoadingEnabled = false;
+            dbContext.Configuration.ProxyCreationEnabled = false;
+            dbContext.Configuration.AutoDetectChangesEnabled = false;
+
+            this.dbContext = dbContext;
+            _dbSet = new Lazy<DbSet<TEntity>>(dbContext.Set<TEntity>);
+
+            _dbQueryNoTrackingWithoutInclude = new Lazy<IQueryable<TEntity>>(dbSet.AsNoTracking().AsQueryable);
+            _dbQueryNoTrackingWithInclude =
+                new Lazy<IQueryable<TEntity>>(() => ApplyInclude(dbQueryNoTrackingWithoutInclude));
+
+            _dbQueryTrackingWithoutInclude = new Lazy<IQueryable<TEntity>>(dbSet.AsQueryable);
+            _dbQueryTrackingWithInclude =
+                new Lazy<IQueryable<TEntity>>(() => ApplyInclude(dbQueryTrackingWithoutInclude));
+        }
 
         /// <summary>
         /// Представление списка сущностей отслеживающего изменения
         /// </summary>
-        protected readonly Lazy<DbSet<TEntity>> dbSet;
+        protected DbSet<TEntity> dbSet
+        {
+            get { return _dbSet.Value; }
+        }
 
         /// <summary>
         /// Запрос к списку сущностей не отслеживаемый и без подключения таблиц
         /// </summary>
-        protected readonly Lazy<IQueryable<TEntity>> dbQueryNoTrackingWithoutInclude;
+        protected IQueryable<TEntity> dbQueryNoTrackingWithoutInclude
+        {
+            get { return _dbQueryNoTrackingWithoutInclude.Value; }
+        }
 
         /// <summary>
         /// Запрос к списку сущностей не отслеживаемый с подключёнными таблицами
         /// </summary>
-        protected readonly Lazy<IQueryable<TEntity>> dbQueryNoTrackingWithInclude;
+        protected IQueryable<TEntity> dbQueryNoTrackingWithInclude
+        {
+            get { return _dbQueryNoTrackingWithInclude.Value; }
+        }
 
         /// <summary>
         /// Запрос к списку сущностей отслеживаемый и без подключения таблиц
         /// </summary>
-        protected readonly Lazy<IQueryable<TEntity>> dbQueryTrackingWithoutInclude;
+        protected IQueryable<TEntity> dbQueryTrackingWithoutInclude
+        {
+            get { return _dbQueryTrackingWithoutInclude.Value; }
+        }
 
         /// <summary>
         /// Запрос к списку сущностей отслеживаемый с подключёнными таблицами
         /// </summary>
-        protected readonly Lazy<IQueryable<TEntity>> dbQueryTrackingWithInclude;
+        protected IQueryable<TEntity> dbQueryTrackingWithInclude
+        {
+            get { return _dbQueryTrackingWithInclude.Value; }
+        }
 
         /// <summary>
         /// Запрос к списку сущностей
@@ -80,175 +138,12 @@ namespace Common.EF.Repositories
             {
                 if (!Tracking)
                 {
-                    if (Include)
-                    {
-                        return dbQueryNoTrackingWithInclude.Value;
-                    }
-
-                    return dbQueryNoTrackingWithoutInclude.Value;
+                    return Include ? dbQueryNoTrackingWithInclude : dbQueryNoTrackingWithoutInclude;
                 }
 
-                if (Include)
-                {
-                    return dbQueryTrackingWithInclude.Value;
-                }
-
-                return dbQueryTrackingWithoutInclude.Value;
+                return Include ? dbQueryTrackingWithInclude : dbQueryTrackingWithoutInclude;
             }
         }
-
-        protected ReadRepository(DbContext dbContext)
-        {
-            dbContext.Configuration.LazyLoadingEnabled = false;
-            dbContext.Configuration.ProxyCreationEnabled = false;
-            dbContext.Configuration.AutoDetectChangesEnabled = false;
-
-            this.dbContext = dbContext;
-            dbSet = new Lazy<DbSet<TEntity>>(dbContext.Set<TEntity>);
-
-            dbQueryNoTrackingWithoutInclude = new Lazy<IQueryable<TEntity>>(dbSet.Value.AsNoTracking().AsQueryable);
-            dbQueryNoTrackingWithInclude = new Lazy<IQueryable<TEntity>>(() => ApplyInclude(dbQueryNoTrackingWithoutInclude.Value));
-
-            dbQueryTrackingWithoutInclude = new Lazy<IQueryable<TEntity>>(dbSet.Value.AsQueryable);
-            dbQueryTrackingWithInclude = new Lazy<IQueryable<TEntity>>(() => ApplyInclude(dbQueryTrackingWithoutInclude.Value));
-        }
-
-        /// <summary>
-        /// Подключает таблици к запросу
-        /// </summary>
-        /// <param name="query">Запрос</param>
-        /// <returns>Запрос с подключёнными таблицами</returns>
-        protected virtual IQueryable<TEntity> ApplyInclude(IQueryable<TEntity> query)
-        {
-            return query;
-        }
-
-        /// <summary>
-        /// Применить фильтацию
-        /// </summary>
-        /// <param name="query">Запрос</param>
-        /// <param name="filter">Фильтр</param>
-        /// <returns>Отфильтрированны запрос</returns>
-        protected virtual IQueryable<TEntity> ApplyFilter(IQueryable<TEntity> query, TFilter filter)
-        {
-            if (string.IsNullOrEmpty(filter.Q)) return query;
-
-            var expressions = new List<MethodCallExpression>();
-            //входной параметр(TEntity) для функтора 
-            var entity = Expression.Parameter(query.ElementType, "p");
-            var stringType = typeof (string);
-            //ссылка на функцию Contains
-            var containsMethod = stringType.GetMethod("Contains");
-            //ссылка на функцию ToLower
-            var toLowerMethod = stringType.GetMethod("ToLower", Type.EmptyTypes);
-            var text = filter.Q.ToLower();
-
-            var props = query.ElementType.GetProperties().Where(p => p.PropertyType == stringType);
-
-            foreach (var prop in props)
-            {
-                //доступ к свойству field.Name объекта TEntity
-                var property = Expression.Property(entity, prop.Name);
-                //выражение вызова метода ToLower
-                var toLower = Expression.Call(property, toLowerMethod);
-                //выражение вызова метода Contains с параметром keyword
-                var contains = Expression.Call(toLower, containsMethod, Expression.Constant(text));
-                expressions.Add(contains);
-            }
-
-            if (!expressions.Any()) return query;
-
-            //комбинируем все выражения оператором или
-            var body = expressions.Aggregate<Expression>(Expression.OrElse);
-            //создаём выражение Func<TEntity, bool>
-            var searchExpression = Expression.Lambda<Func<TEntity, bool>>(body, entity);
-
-            return query.Where(searchExpression);
-        }
-
-        /// <summary>
-        /// Применить сортировку
-        /// </summary>
-        /// <param name="query">Запрос</param>
-        /// <param name="filter">Фильтр</param>
-        /// <returns>Отсортированный запрос</returns>
-        protected virtual IQueryable<TEntity> ApplySort(IQueryable<TEntity> query, TFilter filter)
-        {
-            var exist =
-                filter.SortBy.Split('.')
-                .Aggregate(query.ElementType, (type, name) =>
-                {
-                    if (type == null) return null;
-
-                    var propertyInfo = type.GetProperty(name);
-
-                    if(propertyInfo == null) return null;
-
-                    return propertyInfo.PropertyType;
-                }) != null;
-            // отсортировать нужно в любом случае иначе дальше Skip/Take упадут
-            if (!exist && query.ElementType.GetProperty(filter.SortBy) == null)
-            {
-                filter.SortBy = "Id";
-            }
-
-            // если Id нет берём первое попавшееся свойство
-            if (!exist && query.ElementType.GetProperty(filter.SortBy) == null)
-            {
-                filter.SortBy = query.ElementType.GetProperties().First().Name;
-            }
-
-            var parameter = Expression.Parameter(query.ElementType, "entity");
-
-            //поддержка глубоких селекторов model.innerModel
-            var property = filter.SortBy.Split('.').Aggregate<string, Expression>(parameter, Expression.Property);
-            var func = typeof (Func<,>);
-            var genericFunc = func.MakeGenericType(query.ElementType, property.Type);
-            var expression = Expression.Lambda(genericFunc, property, parameter);
-
-            query = query.Provider.CreateQuery<TEntity>(
-                    Expression.Call(
-                        typeof(Queryable),
-                        filter.Order == Order.Asc ? "OrderBy" : "OrderByDescending",
-                        new[] { query.ElementType, expression.Body.Type },
-                        query.Expression,
-                        Expression.Quote(expression)));
-
-            var genericType = typeof(EntityUtilites<>).MakeGenericType(query.ElementType);
-            var getKeyProps = genericType.GetMethod("Get");
-            object[] args = { };
-            var keyProps = (PropertyInfo[])getKeyProps.Invoke(null, args);
-
-            //исключаем свойство из дополнительной сортировке по ключу
-            //обязательно нужна дополнительная сортировка по ключу если ключ составной
-            foreach (var prop in keyProps.Where(p => p.Name != filter.SortBy))
-            {
-                var keyProperty = Expression.Property(parameter, prop.Name);
-                var keyFunc = typeof(Func<,>);
-                var keyGenericFunc = keyFunc.MakeGenericType(query.ElementType, keyProperty.Type);
-                var keyEexpression = Expression.Lambda(keyGenericFunc, keyProperty, parameter);
-
-                query = query.Provider.CreateQuery<TEntity>(
-                    Expression.Call(
-                        typeof(Queryable),
-                        filter.Order == Order.Asc ? "ThenBy" : "ThenByDescending",
-                        new[] { query.ElementType, keyEexpression.Body.Type },
-                        query.Expression,
-                        Expression.Quote(keyEexpression)));
-            }
-
-            return query;
-        }
-
-        /// <summary>
-        /// Произвести дополнительную обработку над элементами результирующей последовательности
-        /// </summary>
-        /// <param name="items">Список сущностей</param>
-        /// <returns>Список сущностей</returns>
-        public virtual IEnumerable<TEntity> ApplyMapping(IEnumerable<TEntity> items)
-        {
-            return items;
-        } 
 
         /// <summary>
         /// Получить сущность
@@ -259,9 +154,9 @@ namespace Common.EF.Repositories
         {
             if (Cache)
             {
-                var cache = dbSet.Value.Local.Find(key);
+                var cache = dbSet.Local.Find(key);
                 if (cache != null) return cache;
-            }         
+            }
 
             var item = dbQuery.Find(key);
             if (item == null) return null;
@@ -405,6 +300,143 @@ namespace Common.EF.Repositories
         public Task<long> CountAsync(TFilter filter)
         {
             return Task.FromResult(Count(filter));
+        }
+
+        /// <summary>
+        /// Подключает таблици к запросу
+        /// </summary>
+        /// <param name="query">Запрос</param>
+        /// <returns>Запрос с подключёнными таблицами</returns>
+        protected virtual IQueryable<TEntity> ApplyInclude(IQueryable<TEntity> query)
+        {
+            return query;
+        }
+
+        /// <summary>
+        /// Применить фильтацию
+        /// </summary>
+        /// <param name="query">Запрос</param>
+        /// <param name="filter">Фильтр</param>
+        /// <returns>Отфильтрированны запрос</returns>
+        protected virtual IQueryable<TEntity> ApplyFilter(IQueryable<TEntity> query, TFilter filter)
+        {
+            if (string.IsNullOrEmpty(filter.Q)) return query;
+
+            var expressions = new List<MethodCallExpression>();
+            //входной параметр(TEntity) для функтора 
+            var entity = Expression.Parameter(query.ElementType, "p");
+            var stringType = typeof (string);
+            //ссылка на функцию Contains
+            var containsMethod = stringType.GetMethod("Contains");
+            //ссылка на функцию ToLower
+            var toLowerMethod = stringType.GetMethod("ToLower", Type.EmptyTypes);
+            var text = filter.Q.ToLower();
+
+            var props = query.ElementType.GetProperties().Where(p => p.PropertyType == stringType);
+
+            foreach (var prop in props)
+            {
+                //доступ к свойству field.Name объекта TEntity
+                var property = Expression.Property(entity, prop.Name);
+                //выражение вызова метода ToLower
+                var toLower = Expression.Call(property, toLowerMethod);
+                //выражение вызова метода Contains с параметром keyword
+                var contains = Expression.Call(toLower, containsMethod, Expression.Constant(text));
+                expressions.Add(contains);
+            }
+
+            if (!expressions.Any()) return query;
+
+            //комбинируем все выражения оператором или
+            var body = expressions.Aggregate<Expression>(Expression.OrElse);
+            //создаём выражение Func<TEntity, bool>
+            var searchExpression = Expression.Lambda<Func<TEntity, bool>>(body, entity);
+
+            return query.Where(searchExpression);
+        }
+
+        /// <summary>
+        /// Применить сортировку
+        /// </summary>
+        /// <param name="query">Запрос</param>
+        /// <param name="filter">Фильтр</param>
+        /// <returns>Отсортированный запрос</returns>
+        protected virtual IQueryable<TEntity> ApplySort(IQueryable<TEntity> query, TFilter filter)
+        {
+            var exist =
+                filter.SortBy.Split('.')
+                    .Aggregate(query.ElementType, (type, name) =>
+                    {
+                        if (type == null) return null;
+
+                        var propertyInfo = type.GetProperty(name);
+
+                        if (propertyInfo == null) return null;
+
+                        return propertyInfo.PropertyType;
+                    }) != null;
+            // отсортировать нужно в любом случае иначе дальше Skip/Take упадут
+            if (!exist && query.ElementType.GetProperty(filter.SortBy) == null)
+            {
+                filter.SortBy = "Id";
+            }
+
+            // если Id нет берём первое попавшееся свойство
+            if (!exist && query.ElementType.GetProperty(filter.SortBy) == null)
+            {
+                filter.SortBy = query.ElementType.GetProperties().First().Name;
+            }
+
+            var parameter = Expression.Parameter(query.ElementType, "entity");
+
+            //поддержка глубоких селекторов model.innerModel
+            var property = filter.SortBy.Split('.').Aggregate<string, Expression>(parameter, Expression.Property);
+            var func = typeof (Func<,>);
+            var genericFunc = func.MakeGenericType(query.ElementType, property.Type);
+            var expression = Expression.Lambda(genericFunc, property, parameter);
+
+            query = query.Provider.CreateQuery<TEntity>(
+                Expression.Call(
+                    typeof (Queryable),
+                    filter.Order == Order.Asc ? "OrderBy" : "OrderByDescending",
+                    new[] {query.ElementType, expression.Body.Type},
+                    query.Expression,
+                    Expression.Quote(expression)));
+
+            var genericType = typeof (EntityUtilites<>).MakeGenericType(query.ElementType);
+            var getKeyProps = genericType.GetMethod("Get");
+            object[] args = {};
+            var keyProps = (PropertyInfo[]) getKeyProps.Invoke(null, args);
+
+            //исключаем свойство из дополнительной сортировке по ключу
+            //обязательно нужна дополнительная сортировка по ключу если ключ составной
+            foreach (var prop in keyProps.Where(p => p.Name != filter.SortBy))
+            {
+                var keyProperty = Expression.Property(parameter, prop.Name);
+                var keyFunc = typeof (Func<,>);
+                var keyGenericFunc = keyFunc.MakeGenericType(query.ElementType, keyProperty.Type);
+                var keyEexpression = Expression.Lambda(keyGenericFunc, keyProperty, parameter);
+
+                query = query.Provider.CreateQuery<TEntity>(
+                    Expression.Call(
+                        typeof (Queryable),
+                        filter.Order == Order.Asc ? "ThenBy" : "ThenByDescending",
+                        new[] {query.ElementType, keyEexpression.Body.Type},
+                        query.Expression,
+                        Expression.Quote(keyEexpression)));
+            }
+
+            return query;
+        }
+
+        /// <summary>
+        /// Произвести дополнительную обработку над элементами результирующей последовательности
+        /// </summary>
+        /// <param name="items">Список сущностей</param>
+        /// <returns>Список сущностей</returns>
+        public virtual IEnumerable<TEntity> ApplyMapping(IEnumerable<TEntity> items)
+        {
+            return items;
         }
     }
 }

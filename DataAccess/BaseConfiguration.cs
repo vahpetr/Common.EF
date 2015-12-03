@@ -41,7 +41,7 @@ namespace Common.EF.DataAccess
                     {
                         AddDbObjects(context);
                         ExecuteRawQueries(context);
-
+                        context.SaveChanges();
                         transaction.Commit();
                     }
                     catch (Exception e)
