@@ -58,7 +58,7 @@ namespace Common.EF.Repositories
         /// При получении сущности вначале искать в локале.
         /// В локаль сущности попадают если включено отслеживание сущностей
         /// </summary>
-        protected bool Cache = true;
+        protected bool Cache = false;
 
         /// <summary>
         /// Подключить связанные таблицы

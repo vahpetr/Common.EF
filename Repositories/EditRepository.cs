@@ -54,7 +54,7 @@ namespace Common.EF.Repositories
         /// Добавить граф сущности в контекст
         /// </summary>
         /// <param name="entity">Граф сущности</param>
-        private void Attach(TEntity entity)
+        public virtual void Attach(TEntity entity)
         {
             if (dbContext.Entry(entity).State != EntityState.Detached) return;
             dbSet.Attach(entity);
@@ -80,6 +80,17 @@ namespace Common.EF.Repositories
             //{
             //    dbContext.Entry(copy).Property(expression).IsModified = true;
             //}
+        }
+
+        /// <summary>
+        /// Добавить граф сущности в хранилище сущностей и пометить его как изменённый
+        /// </summary>
+        /// <param name="currEntity">Обновляемый граф сущности</param>
+        /// <param name="prevEntity">Текущая сущьность</param>
+        public virtual void Update(TEntity currEntity, TEntity prevEntity)
+        {
+            Attach(currEntity);
+            dbContext.Entry(currEntity).State = EntityState.Modified;
         }
 
         /// <summary>
