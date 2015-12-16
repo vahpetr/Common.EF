@@ -34,7 +34,7 @@ namespace Common.EF.Repositories
         /// <summary>
         /// Представление списка сущностей отслеживающего изменения
         /// </summary>
-        protected DbSet<TEntity> dbSet { get { return _dbSet.Value; } }
+        protected DbSet<TEntity> dbSet => _dbSet.Value;
 
         /// <summary>
         /// Добавить граф сущности в хранилище сущностей и пометить его как добавленный

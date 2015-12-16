@@ -92,42 +92,27 @@ namespace Common.EF.Repositories
         /// <summary>
         /// Представление списка сущностей отслеживающего изменения
         /// </summary>
-        protected DbSet<TEntity> dbSet
-        {
-            get { return _dbSet.Value; }
-        }
+        protected DbSet<TEntity> dbSet => _dbSet.Value;
 
         /// <summary>
         /// Запрос к списку сущностей не отслеживаемый и без подключения таблиц
         /// </summary>
-        protected IQueryable<TEntity> dbQueryNoTrackingWithoutInclude
-        {
-            get { return _dbQueryNoTrackingWithoutInclude.Value; }
-        }
+        protected IQueryable<TEntity> dbQueryNoTrackingWithoutInclude => _dbQueryNoTrackingWithoutInclude.Value;
 
         /// <summary>
         /// Запрос к списку сущностей не отслеживаемый с подключёнными таблицами
         /// </summary>
-        protected IQueryable<TEntity> dbQueryNoTrackingWithInclude
-        {
-            get { return _dbQueryNoTrackingWithInclude.Value; }
-        }
+        protected IQueryable<TEntity> dbQueryNoTrackingWithInclude => _dbQueryNoTrackingWithInclude.Value;
 
         /// <summary>
         /// Запрос к списку сущностей отслеживаемый и без подключения таблиц
         /// </summary>
-        protected IQueryable<TEntity> dbQueryTrackingWithoutInclude
-        {
-            get { return _dbQueryTrackingWithoutInclude.Value; }
-        }
+        protected IQueryable<TEntity> dbQueryTrackingWithoutInclude => _dbQueryTrackingWithoutInclude.Value;
 
         /// <summary>
         /// Запрос к списку сущностей отслеживаемый с подключёнными таблицами
         /// </summary>
-        protected IQueryable<TEntity> dbQueryTrackingWithInclude
-        {
-            get { return _dbQueryTrackingWithInclude.Value; }
-        }
+        protected IQueryable<TEntity> dbQueryTrackingWithInclude => _dbQueryTrackingWithInclude.Value;
 
         /// <summary>
         /// Запрос к списку сущностей
@@ -365,16 +350,10 @@ namespace Common.EF.Repositories
         {
             var exist =
                 filter.SortBy.Split('.')
-                    .Aggregate(query.ElementType, (type, name) =>
-                    {
-                        if (type == null) return null;
-
-                        var propertyInfo = type.GetProperty(name);
-
-                        if (propertyInfo == null) return null;
-
-                        return propertyInfo.PropertyType;
-                    }) != null;
+                    .Aggregate(
+                        query.ElementType,
+                        (type, name) => type?.GetProperty(name)?.PropertyType
+                    ) != null;
             // отсортировать нужно в любом случае иначе дальше Skip/Take упадут
             if (!exist && query.ElementType.GetProperty(filter.SortBy) == null)
             {
