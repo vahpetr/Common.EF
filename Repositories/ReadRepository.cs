@@ -173,7 +173,7 @@ namespace Common.EF.Repositories
             var query = ApplyFilter(dbQuery, filter);
             var sort = ApplySort(query, filter);
             var range = sort.Skip(filter.Skip).Take(filter.Take);
-            var total = dbQuery.LongCount();
+            var total = query.LongCount();
             var items = range.ToArray();
             var mapping = ApplyMapping(items);
             return new ResultDto<TEntity>
